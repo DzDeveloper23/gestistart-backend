@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(cors({
   origin: [
     'http://localhost:4200',
-    process.env.CORS_ORIGIN  // URL Angular sur Vercel (ajoutée après)
+    'https://gestistart-frontend.vercel.app'
   ],
   credentials: true
 }));
