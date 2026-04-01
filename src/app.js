@@ -9,10 +9,15 @@ const app = express();
 // ===== MIDDLEWARE =====
 app.use(express.json());
 
+// ✅ Sécurisé
 app.use(cors({
-  origin: '*',
+  origin: [
+    'http://localhost:4200',
+    'https://gestistart-frontend.vercel.app'
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 
 // ===== CONNEXION BD =====
