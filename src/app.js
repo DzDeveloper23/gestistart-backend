@@ -1,61 +1,51 @@
 require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/database');
-const errorMiddleware = require('./middlewares/error.middleware');
 
 const app = express();
-
-// ===== CONFIG CORS =====
-const corsOptions = {
-  origin: [
-    'http://localhost:4200',
-    'https://gestistart-frontend.vercel.app'
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-};
-
-// ✅ CORS en premier (TRÈS IMPORTANT)
-app.use(cors(corsOptions));
-
-// ✅ Gérer les requêtes preflight (OPTIONS)
-app.options('*', cors(corsOptions));
 
 // ===== MIDDLEWARE =====
 app.use(express.json());
 
-// ===== CONNEXION BD =====
-connectDB()
-  .then(() => console.log('✅ MongoDB connecté'))
-  .catch(err => {
-    console.error('❌ Erreur MongoDB:', err);
-    process.exit(1); // stop serveur si erreur critique
-  });
+// ===== CORS =====
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+// 👉 IMPORTANT : remplacer app.options('*') par :
+app.options('/*', cors());
 
 // ===== ROUTES =====
+const userRoutes = require('./routes/user.routes');
+app.use('/api/users', userRoutes);
+
+// ===== HEALTH CHECK =====
 app.get('/api/health', (req, res) => {
-  res.json({ message: '✅ Serveur fonctionnel' });
+  res.json({ status: "ok" });
 });
 
-app.use('/api/users', require('./routes/user.routes'));
-app.use('/api/auth', require('./routes/auth.routes'));
-app.use('/api/projects', require('./routes/projects.routes'));
-app.use('/api/tasks', require('./routes/tasks.routes'));
-app.use('/api/clients', require('./routes/clients.routes'));
-app.use('/api/employees', require('./routes/employees.routes'));
-app.use('/api/dashboard', require('./routes/dashboard.routes'));
-app.use('/api/notifications', require('./routes/notifications.routes'));
+// ===== ERROR HANDLER =====
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    message: err.message || "Internal Server Error"
+  });
+});
 
-// ===== MIDDLEWARE D'ERREUR =====
-app.use(errorMiddleware);
-
-// ===== LANCEMENT SERVEUR =====
+// ===== CONNECT DB + START SERVER =====
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`🚀 Serveur démarré sur le port ${PORT}`);
-});
-
-module.exports = app;
+connectDB()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("❌ DB connection failed:", err.message);
+    process.exit(1);
+  });
