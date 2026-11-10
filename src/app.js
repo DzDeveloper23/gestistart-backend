@@ -10,10 +10,8 @@ const { initSocket } = require('./config/socket');
 
 const app = express();
 
-// ===== MIDDLEWARE =====
-app.use(express.json());
-
-app.use(cors({
+// ===== CORS CONFIGURATION =====
+const corsOptions = {
   origin: [
     'http://localhost:4200',
     'https://gestistart-frontend.vercel.app',
@@ -21,6 +19,7 @@ app.use(cors({
   ],
   methods: [
     'GET',
+    'HEAD',
     'POST',
     'PUT',
     'PATCH',
@@ -31,11 +30,14 @@ app.use(cors({
     'Content-Type',
     'Authorization'
   ],
-  credentials: true
-}));
+  credentials: true,
+  optionsSuccessStatus: 204
+};
 
-// Répondre aux requêtes preflight OPTIONS
-app.options(/.*/, cors());
+// ===== MIDDLEWARE =====
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
+app.use(express.json());
 
 // ===== CONNEXION BD =====
 connectDB();
@@ -56,18 +58,15 @@ app.use('/api/employees', require('./routes/employees.routes'));
 app.use('/api/dashboard', require('./routes/dashboard.routes'));
 app.use('/api/notifications', require('./routes/notifications.routes'));
 
-// ===== MIDDLEWARE D'ERREUR =====
+// ===== ERROR MIDDLEWARE =====
 app.use(errorMiddleware);
 
-// ===== SOCKET.IO + SERVEUR HTTP =====
+// ===== SOCKET.IO + HTTP SERVER =====
 const PORT = process.env.PORT || 5000;
-
 const server = http.createServer(app);
 
-// Initialiser Socket.IO
 initSocket(server);
 
-// Démarrer le serveur
 server.listen(PORT, () => {
   console.log(`✅ Serveur démarré sur le port ${PORT}`);
   console.log('✅ Socket.IO initialisé');
