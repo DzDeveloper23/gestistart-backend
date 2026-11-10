@@ -1,8 +1,16 @@
+
 const Notification = require('../models/Notification');
+const { getIO } = require('../config/socket');
 
 class NotificationService {
-  // Créer une notification
-  static async createNotification(userId, title, message, type = 'info', relatedId = null, relatedType = null) {
+  static async createNotification(
+    userId,
+    title,
+    message,
+    type = 'info',
+    relatedId = null,
+    relatedType = null
+  ) {
     try {
       const notification = new Notification({
         userId,
@@ -14,16 +22,31 @@ class NotificationService {
         read: false
       });
 
+      // Enregistrer la notification dans MongoDB
       await notification.save();
+
       console.log('✅ Notification créée:', title);
+
+      // Envoyer la notification en temps réel
+      try {
+        const io = getIO();
+
+        if (io) {
+          io.to(`user:${userId}`).emit('notification:new', notification);
+          console.log('✅ Notification envoyée en temps réel');
+        }
+      } catch (socketError) {
+        console.error('❌ Erreur Socket.IO:', socketError.message);
+      }
+
       return notification;
+
     } catch (error) {
       console.error('❌ Erreur création notification:', error);
       throw error;
     }
   }
 
-  // Récupérer toutes les notifications de l'utilisateur
   static async getNotifications(userId, read = null) {
     try {
       const query = { userId };
@@ -39,12 +62,12 @@ class NotificationService {
         .limit(50);
 
       return notifications;
+
     } catch (error) {
       throw error;
     }
   }
 
-  // Marquer une notification comme lue
   static async markAsRead(notificationId, userId) {
     try {
       const notification = await Notification.findByIdAndUpdate(
@@ -59,12 +82,12 @@ class NotificationService {
 
       console.log('✅ Notification marquée comme lue');
       return notification;
+
     } catch (error) {
       throw error;
     }
   }
 
-  // Marquer toutes les notifications comme lues
   static async markAllAsRead(userId) {
     try {
       await Notification.updateMany(
@@ -73,12 +96,12 @@ class NotificationService {
       );
 
       console.log('✅ Toutes les notifications marquées comme lues');
+
     } catch (error) {
       throw error;
     }
   }
 
-  // Supprimer une notification
   static async deleteNotification(notificationId, userId) {
     try {
       const notification = await Notification.findByIdAndDelete(notificationId);
@@ -88,36 +111,37 @@ class NotificationService {
       }
 
       console.log('✅ Notification supprimée');
+
     } catch (error) {
       throw error;
     }
   }
 
-  // Compter les notifications non-lues
   static async getUnreadCount(userId) {
     try {
-      const count = await Notification.countDocuments({
+      return await Notification.countDocuments({
         userId,
         read: false
       });
 
-      return count;
     } catch (error) {
       throw error;
     }
   }
 
-  // Supprimer les vieilles notifications (plus de 30 jours)
   static async cleanOldNotifications() {
     try {
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      
+      const thirtyDaysAgo = new Date(
+        Date.now() - 30 * 24 * 60 * 60 * 1000
+      );
+
       const result = await Notification.deleteMany({
         createdAt: { $lt: thirtyDaysAgo },
         read: true
       });
 
       console.log(`✅ ${result.deletedCount} anciennes notifications supprimées`);
+
     } catch (error) {
       console.error('❌ Erreur nettoyage notifications:', error);
     }

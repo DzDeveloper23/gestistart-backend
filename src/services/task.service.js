@@ -1,3 +1,4 @@
+
 const Task = require('../models/Task');
 const Project = require('../models/Project');
 const Employee = require('../models/Employee');
@@ -8,15 +9,23 @@ class TaskService {
     try {
       // Vérifier que le projet existe
       const project = await Project.findById(taskData.projectId);
+
       if (!project) {
         throw new Error('Projet non trouvé');
       }
 
-      // Si assigné, vérifier que l'employé existe
+      // Vérifier que l'employé existe
       if (taskData.assigneId) {
         const employee = await Employee.findById(taskData.assigneId);
+
         if (!employee) {
           throw new Error('Employé non trouvé');
+        }
+
+        if (!employee.userId) {
+          throw new Error(
+            'Aucun compte utilisateur associé à cet employé'
+          );
         }
       }
 
@@ -28,19 +37,30 @@ class TaskService {
 
       await newTask.save();
 
-      // Populate
+      // Populate projet
       await newTask.populate('projectId', 'titre');
-      await newTask.populate('assigneId', 'nom email');
+
+      // Populate employé + compte utilisateur
+      await newTask.populate({
+        path: 'assigneId',
+        select: 'nom email userId',
+        populate: {
+          path: 'userId',
+          select: '_id'
+        }
+      });
+
       await newTask.populate('createdBy', 'nom email');
       await newTask.populate('commentaires.userId', 'nom email');
 
       return newTask;
+
     } catch (error) {
       throw error;
     }
   }
 
-  // Récupérer toutes les tâches (avec filtres)
+  // Récupérer toutes les tâches
   static async getAllTasks(filters = {}, page = 1, limit = 10) {
     try {
       const query = {};
@@ -83,6 +103,7 @@ class TaskService {
           pages: Math.ceil(total / limit)
         }
       };
+
     } catch (error) {
       throw error;
     }
@@ -102,6 +123,7 @@ class TaskService {
       }
 
       return task;
+
     } catch (error) {
       throw error;
     }
@@ -111,19 +133,21 @@ class TaskService {
   static async updateTask(taskId, updateData) {
     try {
       const task = await Task.findById(taskId);
+
       if (!task) {
         throw new Error('Tâche non trouvée');
       }
 
-      // Si assigné change, vérifier
       if (updateData.assigneId) {
         const employee = await Employee.findById(updateData.assigneId);
+
         if (!employee) {
           throw new Error('Employé non trouvé');
         }
       }
 
       Object.assign(task, updateData);
+
       await task.save();
 
       await task.populate('projectId', 'titre');
@@ -132,15 +156,21 @@ class TaskService {
       await task.populate('commentaires.userId', 'nom email');
 
       return task;
+
     } catch (error) {
       throw error;
     }
   }
 
-  // Changer le statut d'une tâche (pour Kanban)
+  // Changer le statut d'une tâche
   static async updateStatus(taskId, newStatus) {
     try {
-      const validStatuses = ['À faire', 'En cours', 'En révision', 'Terminée'];
+      const validStatuses = [
+        'À faire',
+        'En cours',
+        'En révision',
+        'Terminée'
+      ];
 
       if (!validStatuses.includes(newStatus)) {
         throw new Error('Statut invalide');
@@ -148,7 +178,10 @@ class TaskService {
 
       const task = await Task.findByIdAndUpdate(
         taskId,
-        { status: newStatus, updatedAt: Date.now() },
+        {
+          status: newStatus,
+          updatedAt: Date.now()
+        },
         { new: true }
       )
         .populate('projectId', 'titre')
@@ -156,6 +189,7 @@ class TaskService {
         .populate('commentaires.userId', 'nom email');
 
       return task;
+
     } catch (error) {
       throw error;
     }
@@ -165,6 +199,7 @@ class TaskService {
   static async addComment(taskId, userId, texte) {
     try {
       const task = await Task.findById(taskId);
+
       if (!task) {
         throw new Error('Tâche non trouvée');
       }
@@ -180,6 +215,7 @@ class TaskService {
       await task.populate('commentaires.userId', 'nom email');
 
       return task.commentaires;
+
     } catch (error) {
       throw error;
     }
@@ -189,6 +225,7 @@ class TaskService {
   static async deleteComment(taskId, commentId) {
     try {
       const task = await Task.findById(taskId);
+
       if (!task) {
         throw new Error('Tâche non trouvée');
       }
@@ -200,6 +237,7 @@ class TaskService {
       await task.save();
 
       return task.commentaires;
+
     } catch (error) {
       throw error;
     }
@@ -209,21 +247,40 @@ class TaskService {
   static async assignTask(taskId, employeeId) {
     try {
       const task = await Task.findById(taskId);
+
       if (!task) {
         throw new Error('Tâche non trouvée');
       }
 
       const employee = await Employee.findById(employeeId);
+
       if (!employee) {
         throw new Error('Employé non trouvé');
       }
 
+      // Vérifier le compte utilisateur associé
+      if (!employee.userId) {
+        throw new Error(
+          'Aucun compte utilisateur associé à cet employé'
+        );
+      }
+
       task.assigneId = employeeId;
+
       await task.save();
 
-      await task.populate('assigneId', 'nom email');
+      // Récupérer l'employé et son User ID
+      await task.populate({
+        path: 'assigneId',
+        select: 'nom email userId',
+        populate: {
+          path: 'userId',
+          select: '_id'
+        }
+      });
 
       return task;
+
     } catch (error) {
       throw error;
     }
@@ -233,14 +290,17 @@ class TaskService {
   static async unassignTask(taskId) {
     try {
       const task = await Task.findById(taskId);
+
       if (!task) {
         throw new Error('Tâche non trouvée');
       }
 
       task.assigneId = null;
+
       await task.save();
 
       return task;
+
     } catch (error) {
       throw error;
     }
@@ -250,6 +310,7 @@ class TaskService {
   static async addAttachment(taskId, nom, url) {
     try {
       const task = await Task.findById(taskId);
+
       if (!task) {
         throw new Error('Tâche non trouvée');
       }
@@ -263,6 +324,7 @@ class TaskService {
       await task.save();
 
       return task.piecesJointes;
+
     } catch (error) {
       throw error;
     }
@@ -272,6 +334,7 @@ class TaskService {
   static async removeAttachment(taskId, attachmentId) {
     try {
       const task = await Task.findById(taskId);
+
       if (!task) {
         throw new Error('Tâche non trouvée');
       }
@@ -283,15 +346,17 @@ class TaskService {
       await task.save();
 
       return task.piecesJointes;
+
     } catch (error) {
       throw error;
     }
   }
 
-  // Récupérer les tâches par statut (pour Kanban)
+  // Récupérer les tâches par statut
   static async getTasksByStatus(projectId) {
     try {
       const project = await Project.findById(projectId);
+
       if (!project) {
         throw new Error('Projet non trouvé');
       }
@@ -301,7 +366,6 @@ class TaskService {
         .populate('createdBy', 'nom email')
         .sort({ priorite: -1 });
 
-      // Grouper par statut
       const kanban = {
         'À faire': [],
         'En cours': [],
@@ -314,6 +378,7 @@ class TaskService {
       });
 
       return kanban;
+
     } catch (error) {
       throw error;
     }
@@ -328,13 +393,16 @@ class TaskService {
         throw new Error('Tâche non trouvée');
       }
 
-      return { message: 'Tâche supprimée avec succès' };
+      return {
+        message: 'Tâche supprimée avec succès'
+      };
+
     } catch (error) {
       throw error;
     }
   }
 
-  // Obtenir les statistiques des tâches
+  // Statistiques des tâches
   static async getTaskStats(projectId) {
     try {
       const tasks = await Task.find({ projectId });
@@ -383,6 +451,7 @@ class TaskService {
           Critique: tasks.filter(t => t.priorite === 'Critique').length
         }
       };
+
     } catch (error) {
       throw error;
     }

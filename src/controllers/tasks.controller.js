@@ -1,7 +1,9 @@
+
 const TaskService = require('../services/task.service');
 const NotificationService = require('../services/notification.service');
 
 class TasksController {
+
   // POST /api/tasks - Créer une tâche
   static async createTask(req, res) {
     try {
@@ -14,7 +16,6 @@ class TasksController {
         dateEcheance
       } = req.body;
 
-      // ===== VALIDATIONS =====
       if (!titre || !projectId) {
         return res.status(400).json({
           success: false,
@@ -29,7 +30,6 @@ class TasksController {
         });
       }
 
-      // ===== CRÉER LA TÂCHE =====
       const task = await TaskService.createTask(
         {
           titre,
@@ -42,7 +42,7 @@ class TasksController {
         req.user.userId
       );
 
-      // ✅ CRÉER UNE NOTIFICATION
+      // Notification pour le créateur
       await NotificationService.createNotification(
         req.user.userId,
         'Nouvelle tâche créée',
@@ -52,10 +52,18 @@ class TasksController {
         'task'
       );
 
-      // ✅ SI ASSIGNÉE À QUELQU'UN, NOTIFIER AUSSI CET UTILISATEUR
-      if (assigneId) {
+      // Notification pour l'employé assigné
+      if (task.assigneId && task.assigneId.userId) {
+        const assignedUserId =
+          task.assigneId.userId._id || task.assigneId.userId;
+
+        console.log(
+          '🔔 Notification envoyée au User ID:',
+          assignedUserId
+        );
+
         await NotificationService.createNotification(
-          assigneId,
+          assignedUserId,
           'Tâche assignée',
           `Vous avez une nouvelle tâche : "${titre}"`,
           'warning',
@@ -69,7 +77,10 @@ class TasksController {
         message: 'Tâche créée avec succès',
         task
       });
+
     } catch (error) {
+      console.error('❌ Erreur createTask:', error.message);
+
       return res.status(400).json({
         success: false,
         message: error.message
@@ -82,6 +93,7 @@ class TasksController {
     try {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
+
       const filters = {};
 
       if (req.query.projectId) filters.projectId = req.query.projectId;
@@ -89,12 +101,17 @@ class TasksController {
       if (req.query.status) filters.status = req.query.status;
       if (req.query.priorite) filters.priorite = req.query.priorite;
 
-      const data = await TaskService.getAllTasks(filters, page, limit);
+      const data = await TaskService.getAllTasks(
+        filters,
+        page,
+        limit
+      );
 
       return res.status(200).json({
         success: true,
         ...data
       });
+
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -114,6 +131,7 @@ class TasksController {
         success: true,
         task
       });
+
     } catch (error) {
       return res.status(404).json({
         success: false,
@@ -129,7 +147,6 @@ class TasksController {
 
       const task = await TaskService.updateTask(id, req.body);
 
-      // ✅ CRÉER UNE NOTIFICATION
       await NotificationService.createNotification(
         req.user.userId,
         'Tâche mise à jour',
@@ -144,6 +161,7 @@ class TasksController {
         message: 'Tâche mise à jour avec succès',
         task
       });
+
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -152,7 +170,7 @@ class TasksController {
     }
   }
 
-  // PATCH /api/tasks/:id/status - Changer le statut (Kanban)
+  // PATCH /api/tasks/:id/status - Changer le statut
   static async updateStatus(req, res) {
     try {
       const { id } = req.params;
@@ -167,7 +185,6 @@ class TasksController {
 
       const task = await TaskService.updateStatus(id, status);
 
-      // ✅ CRÉER UNE NOTIFICATION
       await NotificationService.createNotification(
         req.user.userId,
         'Statut de la tâche changé',
@@ -182,6 +199,7 @@ class TasksController {
         message: 'Statut mis à jour',
         task
       });
+
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -195,14 +213,12 @@ class TasksController {
     try {
       const { id } = req.params;
 
-      // Récupérer la tâche avant suppression
       const Task = require('../models/Task');
       const task = await Task.findById(id);
       const taskName = task?.titre || 'Tâche inconnue';
 
       const result = await TaskService.deleteTask(id);
 
-      // ✅ CRÉER UNE NOTIFICATION
       await NotificationService.createNotification(
         req.user.userId,
         'Tâche supprimée',
@@ -216,6 +232,7 @@ class TasksController {
         success: true,
         message: result.message
       });
+
     } catch (error) {
       return res.status(404).json({
         success: false,
@@ -223,8 +240,6 @@ class TasksController {
       });
     }
   }
-
-  // ===== ASSIGNATION =====
 
   // POST /api/tasks/:id/assign - Assigner une tâche
   static async assignTask(req, res) {
@@ -239,11 +254,28 @@ class TasksController {
         });
       }
 
-      const task = await TaskService.assignTask(id, employeeId);
+      const task = await TaskService.assignTask(
+        id,
+        employeeId
+      );
 
-      // ✅ NOTIFIER L'ASSIGNÉ
+      // Récupérer le User ID et non le Employee ID
+      const assignedUserId = task.assigneId?.userId?._id
+        || task.assigneId?.userId;
+
+      if (!assignedUserId) {
+        throw new Error(
+          'Aucun compte utilisateur associé à cet employé'
+        );
+      }
+
+      console.log(
+        '🔔 Notification envoyée au User ID:',
+        assignedUserId
+      );
+
       await NotificationService.createNotification(
-        employeeId,
+        assignedUserId,
         'Tâche assignée',
         `Vous avez une nouvelle tâche : "${task.titre}"`,
         'warning',
@@ -253,10 +285,13 @@ class TasksController {
 
       return res.status(200).json({
         success: true,
-        message: 'Tâche assignée',
+        message: 'Tâche assignée et notification envoyée',
         task
       });
+
     } catch (error) {
+      console.error('❌ Erreur assignTask:', error.message);
+
       return res.status(400).json({
         success: false,
         message: error.message
@@ -271,7 +306,6 @@ class TasksController {
 
       const task = await TaskService.unassignTask(id);
 
-      // ✅ CRÉER UNE NOTIFICATION
       await NotificationService.createNotification(
         req.user.userId,
         'Assignation retirée',
@@ -286,6 +320,7 @@ class TasksController {
         message: 'Assignation retirée',
         task
       });
+
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -293,8 +328,6 @@ class TasksController {
       });
     }
   }
-
-  // ===== COMMENTAIRES =====
 
   // POST /api/tasks/:id/comments - Ajouter un commentaire
   static async addComment(req, res) {
@@ -320,6 +353,7 @@ class TasksController {
         message: 'Commentaire ajouté',
         commentaires
       });
+
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -328,18 +362,22 @@ class TasksController {
     }
   }
 
-  // DELETE /api/tasks/:id/comments/:commentId - Supprimer commentaire
+  // DELETE /api/tasks/:id/comments/:commentId
   static async deleteComment(req, res) {
     try {
       const { id, commentId } = req.params;
 
-      const commentaires = await TaskService.deleteComment(id, commentId);
+      const commentaires = await TaskService.deleteComment(
+        id,
+        commentId
+      );
 
       return res.status(200).json({
         success: true,
         message: 'Commentaire supprimé',
         commentaires
       });
+
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -347,8 +385,6 @@ class TasksController {
       });
     }
   }
-
-  // ===== PIÈCES JOINTES =====
 
   // POST /api/tasks/:id/attachments - Ajouter fichier
   static async addAttachment(req, res) {
@@ -363,13 +399,18 @@ class TasksController {
         });
       }
 
-      const piecesJointes = await TaskService.addAttachment(id, nom, url);
+      const piecesJointes = await TaskService.addAttachment(
+        id,
+        nom,
+        url
+      );
 
       return res.status(201).json({
         success: true,
         message: 'Fichier ajouté',
         piecesJointes
       });
+
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -378,7 +419,7 @@ class TasksController {
     }
   }
 
-  // DELETE /api/tasks/:id/attachments/:attachmentId - Retirer fichier
+  // DELETE /api/tasks/:id/attachments/:attachmentId
   static async removeAttachment(req, res) {
     try {
       const { id, attachmentId } = req.params;
@@ -393,6 +434,7 @@ class TasksController {
         message: 'Fichier supprimé',
         piecesJointes
       });
+
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -401,9 +443,7 @@ class TasksController {
     }
   }
 
-  // ===== KANBAN =====
-
-  // GET /api/tasks/project/:projectId/kanban - Vue Kanban
+  // GET /api/tasks/project/:projectId/kanban
   static async getKanbanView(req, res) {
     try {
       const { projectId } = req.params;
@@ -414,6 +454,7 @@ class TasksController {
         success: true,
         kanban
       });
+
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -422,9 +463,7 @@ class TasksController {
     }
   }
 
-  // ===== STATISTIQUES =====
-
-  // GET /api/tasks/project/:projectId/stats - Stats des tâches
+  // GET /api/tasks/project/:projectId/stats
   static async getTaskStats(req, res) {
     try {
       const { projectId } = req.params;
@@ -435,6 +474,7 @@ class TasksController {
         success: true,
         stats
       });
+
     } catch (error) {
       return res.status(400).json({
         success: false,
